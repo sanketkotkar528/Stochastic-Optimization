@@ -1,8 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep 28 15:53:05 2020
 
+@author: Sanket Kotkar
+
+Genetic algorithm feature selection - Breast cancer using fitness value
 """
-Genetic Algorithm - Feature Selection on breast cancer
-"""
-#%% Importing the libraries
+#=========================================================================================================================#
+# Importing the libraries
 
 import numpy as np
 import pandas as pd
@@ -12,56 +17,70 @@ from sklearn.metrics import accuracy_score,matthews_corrcoef
 import copy
 
 #%%  Loading the data
-Data = pd.read_csv("Data.csv")
+Data = pd.read_csv("D:/Dataset/Breast_cancer/Data.csv")
 
 # Spliting the data into dependent and independent variables
 X = Data.drop(['id','diagnosis'], axis =1)
 Y = Data['diagnosis']
-#%% 
 
-PopLn = 10 
-Pc = 0.7                    # Crossover probability
-Pm = 1/PopLn                # Mutation Probability
-bits = len(X.columns)       # Length of cromosomes
+#=======================================================================================================================#  
+# Creating the cromosomes
+
+PopLn = 10                                                                   # Population size
+Pc = 0.7                                                                     # Crossover probability
+Pm = 1/PopLn                                                                 # Mutation Probability
+bits = len(X.columns)                                                        # Length of cromosomes
 Max_itr = 50
 
 Cromosomes= []
 for i in range(PopLn):
     a = np.random.choice([0,1],size = len(X.columns))
     Cromosomes.append(a)
+    
+#========================================================================================================================#
+
+# Spliting the data into train and test data sets
+X_Train,X_Test,Y_Train,Y_Test = train_test_split(X,Y,test_size = 0.2, random_state = 42 )
 
 
-# Spliting the train test data sets
-X_Train,X_Test,Y_Train,Y_Test = train_test_split(X,Y,test_size = 0.2,random_state = 42)
-
+Best_MCC = []
+Atribute = []
 
 
 for j in range(Max_itr):
-    MCC = [] 
-    #==============              =============#
+    MCC = []
+    FIT = []
     for i in range(len(Cromosomes)):
-        I = np.where(Cromosomes[i]==1)[0]             # extracting the feature index which is to be train
+        I = np.where(Cromosomes[i]== 1)[0]
         
-        Model_1 = RandomForestClassifier()            # Building the randomforest basic model
-        Model_1.fit(X_Train.iloc[:,I],Y_Train)          # Training in the data set
-        Y_Pred_1 = Model_1.predict(X_Test.iloc[:,I])  # Predicting the results
-        mcc = matthews_corrcoef(Y_Test,Y_Pred_1)      # Calculating MCC
-        MCC.append(mcc)                               # Storing the MCC value
-    
-    #============== Tournament Selection ==============#
+        Model_1 = RandomForestClassifier()                                   # Building the randomforest basic model
+        Model_1.fit(X_Train.iloc[:,I],Y_Train)                               # Training in the data set
+        Y_Pred_1 = Model_1.predict(X_Test.iloc[:,I])                         # Predicting the results
+        mcc = matthews_corrcoef(Y_Test,Y_Pred_1)                             # Calculating MCC
+        MCC.append(mcc)                                                      # Storing the MCC value
+        
+        #=================== fitness function ==============#
+        fit = []
+        for j in np.linspace(0.2,1,5):
+            fitness = mcc - (j*len(I)/len(X.columns))
+            fit.append(fitness)
+            F = np.max(fit)
+        FIT.append(F)
+        
+    #===================== Tournament selection =================#
     Selected_cromo = []
-    R1 = np.random.randint(0,10,size=(len(Cromosomes),2))  # Creating random sets of indexes
+    R = np.random.randint(0,10,size =(len(Cromosomes),2))                   # Creating random sets of indexes
     for i in range(len(Cromosomes)):
-        A = max(MCC[R1[i][0]],MCC[R1[i][1]])          # Selecting the best MCC index among 2 random MCC
-        Index = MCC.index(A)                          # Extracting the index of best MCC
-        B = Cromosomes[Index]                         # Extracting the best cromosome according to best MCC
-        Selected_cromo.append(B)                      # Storing all best cromosomes
-    
-    #=============== Crossover ==================# 
-    Crossover = []
-    R2 = np.random.randint(0,10, size = (int(len(Cromosomes)/2),2))
+        A = max(MCC[R1[i][0]],MCC[R1[i][1]])                                # Selecting the best MCC index among 2 random MCC
+        Index = MCC.index(A)                                                # Extracting the index of best MCC
+        B = Cromosomes[Index]                                               # Extracting the best cromosome according to best MCC
+        Selected_cromo.append(B)                                            # Storing all best cromosomes
+        
+    #==================== Crossover =======================# 
+    Crooover = []
+    R2 = np.random.randint(0,10,size = (int(len(Cromosomes)/2),2))
     for i in range(len(R2)):
-        C1 = Selected_cromo[R2[i][0]]                # Cromosomes for crossover
+        C1 = Selected_cromo[R2[i][0]]                                        # Cromosomes for crossover
         C2 = Selected_cromo[R2[i][1]]
         r = np.random.uniform(0,1,size=(1,len(X.columns)))
         if np.any( r < Pc ):
@@ -80,7 +99,7 @@ for j in range(Max_itr):
             Crossover.append(C2)
     Crossover_copy = copy.deepcopy(Crossover)
     
-    #================ Mutation =================#  
+    #=================== Mutation =========================# 
     for i in range(len(Cromosomes)):
         r = np.random.uniform(0,1,size=(1,bits))
         if np.any(r < Pm):
@@ -94,12 +113,44 @@ for j in range(Max_itr):
                 Crossover[i][w] = 1
         else:   
             Crossover[i] = Crossover[i]
-            
-    # Replaceing cromosomes by Mutation cromosomes
-    Cromosomes = Crossover
+        
     
- #==========Best Attributes==========#
- 
- Best_MCC = np.argmax(MCC)
- Best_features = X.columns[list(np.where(Cromosomes[Best_MCC] == 1)[0])]
+    #==================== Testing ==========================# 
     
+    MCC_Test = []
+    FIT_Test = []
+    CV = Crossover
+    for i in range(len(CV)):
+        I = np.where(CV[i]==1)[0]
+        
+        Model_2 = RandomForestClassifier()              # Building the randomforest basic model
+        Model_2.fit(X_Train.iloc[:,I],Y_Train)          # Training in the data set
+        Y_Pred_2 = Model_2.predict(X_Test.iloc[:,I])    # Predicting the results
+        mcc_T = matthews_corrcoef(Y_Test,Y_Pred_2)      # Calculating MCC
+        MCC_Test.append(mcc_T)                          # Storing the MCC value
+        
+        #================== Fitness function ======================#
+        fit_Test = []
+        for j in np.linspace(0.2,1,5):
+            fitness_Test = mcc - (j*len(I)/len(X.columns))
+            fit_Test.append(fitness_Test)
+            F_Test = np.max(fit_Test)
+        FIT_Test.append(F_Test)
+    B_MCC = np.max(FIT_Test)
+    Best_MCC.append(B_MCC)
+    Best_MCC_Index = np.argmax(FIT_Test)
+    Attr = CV[Best_MCC_Index]
+    Atribute.append(Attr)
+#===========================================================================================================# 
+#   Best Attributes 
+    
+Best_Atribute_Index = np.argmax(Best_MCC)
+Best_Cromosomes = Atribute[Best_Atribute_Index]
+#   Best features 
+Feat = X[X.columns[list(Best_Cromosomes[0])]]
+Best_Features = X.columns[Feat] 
+
+
+
+
+
